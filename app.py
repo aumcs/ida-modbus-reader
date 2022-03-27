@@ -33,14 +33,11 @@ def githubChecker():
         try:
             r = pyping.ping('www.github.com')
             if r.ret_code == 0:
-                print("done")
                 githubLoopChecker = False
             else:
-                print("sth")
                 pass
 
         except:
-            print("githubChecker() failed")
             time.sleep(5)
 
 # Check for update fucntion.
@@ -79,7 +76,7 @@ def updateChecker():
         pass
 
 if __name__ == '__main__':
-    pipUpdate()
+    #pipUpdate()
     #githubChecker()
     #updateChecker()
     os.system('python '+ APPFILE)

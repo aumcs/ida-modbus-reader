@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}IDA Platform • Power Meter{% endblock %}
+{% block title %}Power Meter • IDA Platform{% endblock %}
 {% block content %}
 <div class="box-header">
   <br><br><br>
@@ -10,9 +10,6 @@
 <html>
 
 <body>
-
-  <!-- tab -->
-
   <!-- alert -->
   {% with messages = get_flashed_messages() %}
   {% if messages[0] == "Updated Successfully" or "successfully" in messages[0] %}
@@ -41,7 +38,7 @@
   <!-- elements in tab -->
   {% for datarow in powermeter %}
   {% if datarow[2] == "tablinks active" %}
-  <br><br>
+  <br>
   <div id="table{{ datarow[0] }}" class="tabcontent" style="display: block">
     {% else %}
     <div id="table{{ datarow[0] }}" class="tabcontent">

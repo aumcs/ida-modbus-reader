@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% block title %}Database • IDA Platform{% endblock %}
+{% block content %}
+<div class="box-header-dbcfg">
+  <br><br><br>
+  <h2>Database Configuration</h2><br>
+</div>
+
+{% with messages = get_flashed_messages() %}
+{% if "Successfully" in messages[0] %}
+<br>
+<div class="success_item">
+  {{ messages[0] }}
+  <span class="closebtn" onclick="this.parentElement.style.display='none';">&times;</span>
+</div>
+{% elif messages %}
+<br>
+<div class="alert_item">
+  {{ messages[0] }}
+  <span class="closebtn" onclick="this.parentElement.style.display='none';">&times;</span>
+</div>
+{% endif %}
+{% endwith %}
+<br>
+<div id="db_config" class="tabcontent" style="display: block">
+  <form method="POST" action="/dbcfg">
+    <div class="dbcfg_input">
+      <table>
+        <tr>
+          <th colspan="2">Change Database<br><br></th>
+        </tr>
+        <tr>
+          <td><label for="webusername">WebUI Username:&nbsp;</label></td>
+          <td><input type="text" id="webusername" name="webusername" maxlength="20" autocomplete="off">
+          </td><br>
+        </tr>
+        <tr>
+          <td><label for="webpassword">WebUI Password:&nbsp;</label></td>
+          <td><input type="password" id="webpassword" name="webpassword" maxlength="20" autocomplete="off">
+          </td><br>
+        </tr>
+        <tr>
+          <td><label for="currentpassword">Current Database Password:&nbsp;</label></td>
+          <td><input type="password" id="currentpassword" name="currentpassword" maxlength="20" autocomplete="off">
+          </td><br>
+        </tr>
+        <tr>
+          <td><label for="ip">IP Address:&nbsp;</label></td>
+          <td><input type="text" id="ip" name="ip" maxlength="15" autocomplete="off">
+          </td><br>
+        </tr>
+        <tr>
+          <td><label for="port">Port:&nbsp;</label></td>
+          <td><input type="number" id="port" name="port" maxlength="5" autocomplete="off">
+          </td><br>
+        </tr>
+        <tr>
+          <td><label for="dbusername">Username:&nbsp;</label></td>
+          <td><input type="text" id="dbusername" name="dbusername"maxlength="20" autocomplete="off">
+          </td><br>
+        </tr>
+        <tr>
+          <td><label for="dbpassword">New Database Password:&nbsp;</label></td>
+          <td><input type="password" id="dbpassword" name="dbpassword" maxlength="20" autocomplete="off">
+          </td><br>
+        </tr>
+        <tr>
+          <td><label for="schema">Schema:&nbsp;</label></td>
+          <td><input type="text" id="schema" name="schema" maxlength="20" autocomplete="off">
+          </td><br>
+        </tr>
+
+      </table>
+    </div><br>
+    <div id='message' class="password_checker">&nbsp;</div>
+    <br>
+    <div id="submit_dbcfg" class="submit_dbcfg">
+      <button type="submit" class="btn">Submit</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

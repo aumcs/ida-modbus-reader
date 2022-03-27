@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}IDA Platform • Configuration{% endblock %}
+{% block title %}uRCONNECT • IDA Platform{% endblock %}
 {% block content %}
 <div class="box-header">
   <br><br><br>
@@ -81,7 +81,9 @@
               </td>
               <td style="width: 11%;border: none"><label for="interval">Interval :&nbsp;</label>
                 <input type="text" id="interval" name="interval" style="width: 30%" maxlength="5" onblur="validate()" value={{ interval }}>
-                <div id="unitid_alert">&nbsp;</div>
+              </td>
+              <td style="width: 11%;border: none"><label for="wait">Wait :&nbsp;</label>
+                <input type="text" id="wait" name="wait" style="width: 30%" maxlength="5" onblur="validate()" value={{ wait }}>
               </td>
 
               <td style="width: 25%;border: none"><label for="nexpieauth">NEXPIE:&nbsp;</label><select name="nexpieauth{{ datarow[0] }}" id="nexpieauth">

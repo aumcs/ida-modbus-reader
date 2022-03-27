@@ -7,8 +7,9 @@
 ## Details
 ### Patch Note
 ```
-- Remake Power meter reader.
-- Remake uRCONNECT reader.
+- Add C Intelligent reader.
+- Performance upgrade for uRCONNECT and power meter reader.
+- Update tutorial documents.
 ```
 ### Plan
 ```
@@ -60,6 +61,7 @@ docker save -o rootfs.tar
 * [For more information and how to install on IOx.](https://www.cisco.com/c/en/us/support/docs/routers/1101-industrial-integrated-services-router/214383-build-and-deploy-a-docker-iox-package-fo.html#anc7)
 
 ### For other ARM 64-bit architecture.
+* It's okay if u want to deploy web application, but I prefer to run script on server/device instead of deploy to server.
 * Add command to dockerfile
 ```
 EXPOSE 6969

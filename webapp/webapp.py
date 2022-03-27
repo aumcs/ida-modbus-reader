@@ -1,7 +1,10 @@
 """
     Tawannnnnnnn :)
     modbus_ida - webapp.py
-    Main Python scripts for web application & modbus TCP/IP reader from NECTEC's uRCONNECT.
+    Main Python scripts for web application & modbus TCP/IP reader from
+    * NECTEC's uRCONNECT.
+    * Power meter that connected to uRCONNECT.
+    * Melsec C Intelligent database.
 """
 
 import os
@@ -50,6 +53,15 @@ def databaseConnection():
                            passwd = DB_PASSWORD,
                            port = DB_PORT,
                            db = DB_SCHEMA)
+    return connection
+
+# Establish MySQL connection to database server.
+def cintelDbConnection():
+    connection = MySQL.connect(host= CINTEL_DB_IP,
+                           user = CINTEL_DB_USERNAME,
+                           passwd = CINTEL_DB_PASSWORD,
+                           port = CINTEL_DB_PORT,
+                           db = CINTEL_DB_SCHEMA)
     return connection
 
 """
@@ -125,6 +137,50 @@ def createPowermeterAddress():
         pass
 
 """
+    Create table "cintel" if it isn't exists.
+    * id = PK, id number
+    * cintelname = C Intelligent name.
+    * tablinks = active status of tablinks in cintel.html
+    * nexpieauth = Nexpie credentials.
+"""
+def createCintel():
+    connection = databaseConnection()
+    cursor = connection.cursor()
+    executeCommand = ("CREATE TABLE IF NOT EXISTS cintel (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, cintelname VARCHAR(40) NOT NULL, "
+    "tablinks VARCHAR(40) NOT NULL, nexpieauth VARCHAR(50) NOT NULL)")
+    cursor.execute(executeCommand,)
+    connection.commit()
+    try:
+        connection.close()
+    except:
+        pass
+
+"""
+    Create table "cintel_address" if it isn't exists.
+    * id = PK, id number
+    * source = Value come from C Intelligent name? (just for reminder)
+    * plcaddress = PLC Address (just for reminder)
+    * cintelname = name of C Intelligent.
+    * datatable = C Intelligent address. (idk why vendor named "datatable" for cintel address)
+    * dataname = C Intelligent address name. (e.g. Voltage1, Temperature_Plant1)
+    * datatype = data type of value that u need to convert to. (e.g. uint32 = convert two uint16 to uint32)
+    * multiplier = just a multiplier. (converted data MULTIPLIED BY multiplier)
+    * unit = unit of value (e.g. mA, V, Celcius)
+    * quantity = 1 or 2 (depends on datatype)
+"""
+def createCintelAddress():
+    connection = databaseConnection()
+    cursor = connection.cursor()
+    executeCommand = ("CREATE TABLE IF NOT EXISTS cintel_address (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, source VARCHAR(40) NOT NULL, plcaddress VARCHAR(10), cintelname VARCHAR(40) NOT NULL,"
+    "datatable VARCHAR(10), dataname VARCHAR(50), datatype VARCHAR(30) NOT NULL, unit VARCHAR(20), multiplier VARCHAR(20) NOT NULL, quantity VARCHAR(10))")
+    cursor.execute(executeCommand,)
+    connection.commit()
+    try:
+        connection.close()
+    except:
+        pass
+
+"""
     Create table "nexpie_auth" if it isn't exists.
     * name = NEXPIE device name (it's just a name, don't mind)
     * clientid = NEXPIE device's client id
@@ -183,8 +239,8 @@ def createUser():
 def createConfig():
     connection = databaseConnection()
     cursor = connection.cursor()
-    executeCommand = ("CREATE TABLE IF NOT EXISTS config (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, unitid VARCHAR(2) NOT NULL UNIQUE, ip VARCHAR(15) NOT NULL UNIQUE"
-    ",note VARCHAR(15) NOT NULL, status VARCHAR(10) NOT NULL, tablinks VARCHAR(40) NOT NULL, urconnect VARCHAR(40) NOT NULL UNIQUE, nexpieauth VARCHAR(50))")
+    executeCommand = ("CREATE TABLE IF NOT EXISTS config (id INT NOT NULL AUTO_INCREMENT PRIMARY KEY, unitid VARCHAR(2) NOT NULL UNIQUE, ip VARCHAR(15) NOT NULL UNIQUE, "
+    "note VARCHAR(15) NOT NULL, status VARCHAR(10) NOT NULL, tablinks VARCHAR(40) NOT NULL, urconnect VARCHAR(40) NOT NULL UNIQUE, nexpieauth VARCHAR(50))")
     cursor.execute(executeCommand)
     connection.commit()
     try:
@@ -252,6 +308,15 @@ DB_PORT = appconfig.get('SQLALCHEMY_CONFIG', 'port')
 DB_SCHEMA = appconfig.get('SQLALCHEMY_CONFIG', 'schema')
 NEXPIE_URL = appconfig.get('NEXPIE', 'shadow_url')
 jsondata = []
+# C Intelligent is optional.
+try:
+    CINTEL_DB_USERNAME = appconfig.get('C_INTELLIGENT', 'username')
+    CINTEL_DB_PASSWORD = appconfig.get('C_INTELLIGENT', 'password')
+    CINTEL_DB_IP = appconfig.get('C_INTELLIGENT', 'ip')
+    CINTEL_DB_PORT = appconfig.get('C_INTELLIGENT', 'port')
+    CINTEL_DB_SCHEMA = appconfig.get('C_INTELLIGENT', 'schema')
+except:
+    pass
 
 logger = logging.getLogger("modbus_ida")
 setup_logging()
@@ -261,7 +326,7 @@ initInterval() # Create time interval config (if not exist.)
 # Initialize application.
 initChecker = True
 while initChecker == True:
-    r = pyping.ping('203.150.37.154')
+    r = pyping.ping(str(DB_IP))
     if r.ret_code == 0:
         try:
             connection = MySQL.connect(host= DB_IP,
@@ -280,12 +345,14 @@ while initChecker == True:
             createConfig()
             createPowermeter()
             createPowermeterAddress()
+            createCintelAddress()
+            createCintel()
 
             app = Flask(__name__)
             db = SQLAlchemy()
             db.pool_recycle = 300
             app.config['SECRET_KEY'] = appconfig.get('APP_INIT', 'secretkey')
-            app.config['SQLALCHEMY_DATABASE_URI'] = "mysql://" + DB_USERNAME + ":" + DB_PASSWORD + "@" + DB_IP + ":" + DB_PORT + "/" + DB_SCHEMA
+            app.config['SQLALCHEMY_DATABASE_URI'] = "mysql+mysqlconnector://" + DB_USERNAME + ":" + DB_PASSWORD + "@" + DB_IP + ":" + DB_PORT + "/" + DB_SCHEMA
             app.config["SQLALCHEMY_POOL_SIZE"] = 20
             app.config['PERMANENT_SESSION_LIFETIME'] =  timedelta(minutes=15)
             app.config['SESSION_REFRESH_EACH_REQUEST'] = True
@@ -311,6 +378,10 @@ def load_user(user_id):
     # since the user_id is just the primary key of our user table, use it in the query for the user.
     return User.query.get(int(user_id))
 
+######################################################################################################################
+# Database &
+######################################################################################################################
+
 # Load uRCONNECT default config from database server.
 def urconnectSettings():
     connection = MySQL.connect(host= DB_IP,
@@ -320,6 +391,13 @@ def urconnectSettings():
                            db = "urconnect_settings")
     return connection
 
+# Close database connection
+def closeConnection(connection):
+    try:
+        connection.close()
+    except:
+        pass
+
 # Change web application's credentials.
 def changePassword(encryptedPassword, name):
     connection = databaseConnection()
@@ -328,13 +406,6 @@ def changePassword(encryptedPassword, name):
     cursor.execute(executeCommand, (encryptedPassword, name,))
     connection.commit()
     closeConnection(connection)
-
-# Close database connection
-def closeConnection(connection):
-    try:
-        connection.close()
-    except:
-        pass
 
 # Delete registered device from database.
 def deleteConfig(urconnect):
@@ -381,6 +452,47 @@ def getPowermeterAddress():
     result = cursor.fetchall()
     closeConnection(connection)
     return(result)
+
+# Get list of C Intelligent from database.
+def getCintel():
+    connection = databaseConnection()
+    cursor = connection.cursor()
+    executeCommand = "SELECT * FROM cintel"
+    cursor.execute(executeCommand)
+    result = cursor.fetchall()
+    closeConnection(connection)
+    return(result)
+
+# Get list of C Intelligent modbus address from database.
+def getCintelAddress():
+    connection = databaseConnection()
+    cursor = connection.cursor()
+    executeCommand = "SELECT id, cintelname, source, plcaddress, datatype , datatable, dataname, unit, multiplier FROM cintel_address"
+    cursor.execute(executeCommand)
+    result = cursor.fetchall()
+    closeConnection(connection)
+    return(result)
+
+def newCintel(cintelname, nexpieauth):
+    connection = databaseConnection()
+    cursor = connection.cursor()
+    executeCommand = "SELECT tablinks FROM cintel WHERE tablinks = %s"
+    cursor.execute(executeCommand, ("tablinks active",))
+    result = cursor.fetchall()
+    # Note: tablinks active = show this tab after GET config page (index.html)
+    if result == []:
+        tablinks = "tablinks active"
+    else:
+        tablinks = "tablinks"
+    executeCommand = ("INSERT INTO cintel (cintelname, tablinks, nexpieauth) VALUES (%s, %s, %s)")
+    cursor.execute(executeCommand, (cintelname, tablinks, nexpieauth))
+    # Create address for powermeter.
+    for i in range(0, 15):
+        randomname = randomAddressname()
+        executeCommand = ("INSERT INTO cintel_address (source, cintelname, dataname, datatype, multiplier) VALUES (%s, %s, %s, %s, %s)")
+        cursor.execute(executeCommand, ("source", cintelname , randomname, "none", "-"),)
+    connection.commit()
+    closeConnection(connection)
 
 # Random power meter address name.
 def randomAddressname():
@@ -432,7 +544,7 @@ def getCredentialsName():
     cursor.execute(executeCommand)
     result = cursor.fetchall()
     closeConnection(connection)
-    return result
+    return(result)
 
 # Delete NEXPIE device from database.
 def deleteCredentials(nexpiename):
@@ -482,6 +594,16 @@ def getPowermeterTab():
     connection = databaseConnection()
     cursor = connection.cursor()
     executeCommand = "SELECT tablinks, id, metername FROM powermeter"
+    cursor.execute(executeCommand,)
+    result = cursor.fetchall()
+    closeConnection(connection)
+    return result
+
+# Get value that define tab(s) in config page.
+def getCintelTab():
+    connection = databaseConnection()
+    cursor = connection.cursor()
+    executeCommand = "SELECT tablinks, id, cintelname FROM cintel"
     cursor.execute(executeCommand,)
     result = cursor.fetchall()
     closeConnection(connection)
@@ -580,7 +702,7 @@ def addNexpieCredentials(name, clientid, token, secret):
     * Check type and correction of input before update to database.
     * If its duplicate or error, then return error and skip update.
 """
-def inputChecker(ip, unitid, devicename, oldip, oldunitid, oldname):
+def inputChecker(ip, unitid, devicename, oldip, oldunitid, oldname, nexpieauth):
     if ip == "":
         return("Failed: IP address cannot be blank.")
     if unitid == "":
@@ -608,6 +730,12 @@ def inputChecker(ip, unitid, devicename, oldip, oldunitid, oldname):
     result = cursor.fetchall()
     if result != []:
         return("Failed: The name '" + devicename + "' is already used in database.")
+    # Check nexpieauth usage in C Intelligent.
+    executeCommand = "SELECT cintelname FROM cintel WHERE nexpieauth = %s"
+    cursor.execute(executeCommand, (nexpieauth,))
+    result = cursor.fetchall()
+    if result != []:
+        return("Failed: '" + nexpieauth + "' is already used in C Intelligent.")
     closeConnection(connection)
     return("Passed")
 
@@ -639,6 +767,11 @@ def inputCheckerNewDevice(ip, unitid, devicename):
     result = cursor.fetchall()
     if result != []:
         return("Failed: The name '" + devicename + "' is already used in database.")
+    executeCommand = "SELECT cintelname FROM cintel WHERE nexpieauth = %s"
+    cursor.execute(executeCommand, (nexpieauth,))
+    result = cursor.fetchall()
+    if result != []:
+        return("Failed: '" + nexpieauth + "' is already used in C Intelligent.")
     closeConnection(connection)
     return("Passed")
 
@@ -671,7 +804,7 @@ def checkUrconnect(ip, unitid):
     except:
         return("Failed: Can't connect to " + ip + ", unit id " + unitid)
 
-# Read type of card's address from uRCONNECT.
+# Read cardtype from uRCONNECT.
 def readCard(ip, unitid):
     PORT_NUMBER = 502
     client = ModbusClient(auto_open=True, timeout=3, host=ip, port=PORT_NUMBER, unit_id=unitid, debug=True)
@@ -716,43 +849,21 @@ def getModbusType(name, cardList):
     return(resultList)
 
 # Write time interval to app_config.ini
-def writeInterval(interval):
-    if interval == "":
-        return("Failed: Interval cannot be blank.")
+def writeInterval(interval, wait):
+    if interval == "" or wait == "":
+        return("Failed: Modbus polling interval or nexpie wait timer cannot be blank.")
     try:
         tempInterval = int(interval)
+        tempWait = int(wait)
     except:
         return("Failed: Interval can only be numeric character(s).")
     cfgfile = open(APP_CONFIG, "w")
     appconfig.set("TIME_INTERVAL", "timeInterval", interval)
+    appconfig.set("TIME_INTERVAL", "delayBeforeNexpie", wait)
     appconfig.write(cfgfile)
+    ## write to database.
+
     return("Passed")
-
-"""
-    Quick note:
-    * realAddress = address that use in pyModbusTCP. (ALWAYS MINUS ONE FROM URCONNECT DATASHEET)
-    * intAddress = address that use in uRCONNECT document, uRCONNECT configuration software and IDA web application.
-
-def addressChecker(name, startingAddress, filename):
-    try:
-        intAddress = int(startingAddress)
-        realAddress = intAddress - 1
-
-            intAddress > 0 same as realAddress >= 0
-            intAddress = 1 same as register 40000 (holding register 0)
-
-        if intAddress > 0:
-            if name != "" and name != " ":
-                model = getModelFromFilename(filename)
-                return("Passed", str(realAddress), model[0][0])
-            else:
-                pass
-        else:
-            pass
-        return("Not Passed", "0", "0")
-    except:
-        return("Not Passed", "0", "0")
-"""
 
 # Check nexpie device usage before delete from database.
 def chkCredentialUsage(nexpiename):
@@ -807,8 +918,43 @@ def powermeterAddressChecker(name, modbustype, startaddr, multiplier, datatype):
     except:
         return("Not Passed", "0", "-")
 
+# Check C Intelligent address before add/change to database.
+def cintelAddressChecker(source, datatable, dataname, datatype , multiplier, unit):
+    # If multiplier or address isn't in number format => code in "except" is goin' to work.
+    try:
+        floatMultiplier = float(multiplier)
+        datatable = int(datatable)
+        if dataname == "" or dataname == " " or datatable <= 0 or datatable == None:
+            return("Not Passed", "-")
+        nameFirstchar = dataname[:1]
+        # Need to check first character of name. because NEXPIE will reject JSON data if the first character of name is number.
+        firstcharIsdigit = nameFirstchar.isdigit()
+        if firstcharIsdigit == True:
+            return("Not Passed", "-")
+        if datatype != "none":
+            quantity = datatypeQuantity(datatype)
+        return("Passed", quantity)
+    except:
+        return("Not Passed", "-")
+
 """
-    Add blank input in "powermeter.html"
+    * Check Nexpie credential before add/change to C Intelligent database.
+    * Cannot use same credential w/ urconnect & power meter.
+"""
+def cintelDbChecker(nexpieauth):
+    connection = databaseConnection()
+    cursor = connection.cursor()
+    executeCommand = "SELECT urconnect FROM config WHERE nexpieauth = %s"
+    cursor.execute(executeCommand, (nexpieauth,))
+    result = cursor.fetchall()
+    if result == []:
+        return("Passed" , "")
+    else:
+        flashmsg = "Failed: " + nexpieauth + " has been used."
+        return(" Not Passed", flashmsg)
+
+"""
+    * Add blank input in "powermeter.html"
     e.g. if u add 13 address to "powermeter_address". this function will generate blank input to 15 again.
 """
 def updateBlankInput(metername):
@@ -817,7 +963,7 @@ def updateBlankInput(metername):
     executeCommand = "SELECT id FROM powermeter_address WHERE metername = %s and modbustype = %s"
     cursor.execute(executeCommand, (metername, "00",))
     result = cursor.fetchall()
-    # Always keep 15 blank input per powermeter
+    # Always keep 15 blank input per power meter
     blankinput = int(len(result))
     if blankinput < 15:
         blankinput = 15 - blankinput
@@ -829,7 +975,7 @@ def updateBlankInput(metername):
         blankinput = blankinput - 15
         strBlankinput = str(blankinput)
         executeCommand = "SELECT id FROM powermeter_address WHERE modbustype = %s and metername = %s ORDER BY id DESC LIMIT " + strBlankinput
-        cursor.execute(executeCommand, (id),)
+        cursor.execute(executeCommand, ("00", metername),)
         result = cursor.fetchall()
         for i in range(0, len(result)):
             id = result[i][0]
@@ -859,6 +1005,65 @@ def deletePowermeter(metername):
     cursor.execute(executeCommand, (metername,))
     executeCommand = "DELETE FROM powermeter_address WHERE metername = %s"
     cursor.execute(executeCommand, (metername,))
+    executeCommand = "UPDATE powermeter SET tablinks = %s LIMIT 1"
+    cursor.execute(executeCommand, ("tablinks active",))
+    connection.commit()
+    closeConnection(connection)
+
+# Delete power meter from database.
+def deleteCintel(cintelname):
+    connection = databaseConnection()
+    cursor = connection.cursor()
+    executeCommand = "DELETE FROM cintel WHERE cintelname = %s"
+    cursor.execute(executeCommand, (cintelname,))
+    executeCommand = "DELETE FROM cintel_address WHERE cintelname = %s"
+    cursor.execute(executeCommand, (cintelname,))
+    executeCommand = "UPDATE cintel SET tablinks = %s LIMIT 1"
+    cursor.execute(executeCommand, ("tablinks active",))
+    connection.commit()
+    closeConnection(connection)
+
+# Read function name. i mean it :D
+def updateCintel(cintelname, nexpieauth, oldcintelname):
+    connection = databaseConnection()
+    cursor = connection.cursor()
+    executeCommand = "UPDATE cintel_address SET cintelname = %s WHERE cintelname = %s"
+    cursor.execute(executeCommand, (cintelname, oldcintelname,))
+    executeCommand = "UPDATE cintel SET cintelname = %s, nexpieauth = %s WHERE cintelname = %s"
+    cursor.execute(executeCommand, (cintelname, nexpieauth, oldcintelname,))
+    connection.commit()
+    closeConnection(connection)
+
+"""
+    Add blank input in "cintel.html"
+    e.g. if u add 13 address to "cintel_address". this function will generate blank input to 15 again.
+"""
+def updateBlankCintel(cintelname):
+    connection = databaseConnection()
+    cursor = connection.cursor()
+    executeCommand = "SELECT id FROM cintel_address WHERE cintelname = %s and datatable IS NULL"
+    cursor.execute(executeCommand, (cintelname,))
+    result = cursor.fetchall()
+    # Always keep 15 blank input per powermeter
+    blankinput = int(len(result))
+    if blankinput < 15:
+        blankinput = 15 - blankinput
+        for i in range(0, blankinput):
+            randomname = randomAddressname()
+            executeCommand = ("INSERT INTO cintel_address (source, dataname, datatype, cintelname, multiplier) VALUES (%s, %s, %s, %s, %s)")
+            cursor.execute(executeCommand, ("source", randomname, "none", cintelname, "-"),)
+    elif blankinput > 15:
+        blankinput = blankinput - 15
+        strBlankinput = str(blankinput)
+        executeCommand = "SELECT id FROM cintel_address WHERE cintelname = %s and datatable IS NULL ORDER BY id DESC LIMIT " + strBlankinput
+        cursor.execute(executeCommand, (cintelname,))
+        result = cursor.fetchall()
+        for i in range(0, len(result)):
+            id = result[i][0]
+            executeCommand = ("DELETE FROM cintel_address WHERE id = %s")
+            cursor.execute(executeCommand, (id,))
+    else:
+        pass
     connection.commit()
     closeConnection(connection)
 
@@ -872,8 +1077,51 @@ def getDatatype():
     closeConnection(connection)
     return(datatypeSelector)
 
+# Check webapp's password and database's password before edit app_config.ini
+def checkPasswordDB(webusername, webpassword, currentpassword):
+    passwordResult = check_password_hash(current_user.password, webpassword)
+    if passwordResult == False or webusername != current_user.username or currentpassword != DB_PASSWORD:
+        return(False)
+    return(True)
+
+# Write database's password, username, schema, port and ip address.
+def dbcfgWriter(ip, port, username, password, schema):
+    if ip == "" or port == "":
+        return("Failed: IP address and port cannot be blank.")
+    elif username == "" or password == "" or schema == "":
+        return("Failed: Please check your database config.")
+
+    # Open app_config.ini then update config.
+    try:
+        cfgfile = open(APP_CONFIG, "w")
+        appconfig.set("SQLALCHEMY_CONFIG", "username", username)
+        appconfig.set("SQLALCHEMY_CONFIG", "password", password)
+        appconfig.set("SQLALCHEMY_CONFIG", "ip", ip)
+        appconfig.set("SQLALCHEMY_CONFIG", "port", port)
+        appconfig.set("SQLALCHEMY_CONFIG", "schema", schema)
+        appconfig.write(cfgfile)
+        writerChecker = True
+    except:
+        writerChecker = False
+    # Revert to old value if update failed.
+    if writerChecker == True:
+        return("app_config updated successfully.")
+    else:
+        cfgfile = open(APP_CONFIG, "w")
+        appconfig.set("SQLALCHEMY_CONFIG", "username", DB_USERNAME)
+        appconfig.set("SQLALCHEMY_CONFIG", "password", DB_PASSWORD)
+        appconfig.set("SQLALCHEMY_CONFIG", "ip", DB_IP)
+        appconfig.set("SQLALCHEMY_CONFIG", "port", DB_PORT)
+        appconfig.set("SQLALCHEMY_CONFIG", "schema", DB_SCHEMA)
+        appconfig.write(cfgfile)
+        return("Failed: Cannot write to config file.")
+
+######################################################################################################################
+# Flask
+######################################################################################################################
+
 """
-    GET index.html
+    index.html
     * Display current uRCONNECT's config.
 """
 @app.route("/index")
@@ -889,8 +1137,9 @@ def index():
     cursor.execute(executeCommand)
     result = cursor.fetchall()
     interval = int(appconfig.get('TIME_INTERVAL', 'timeInterval'))
+    wait = int(appconfig.get('TIME_INTERVAL', 'delayBeforeNexpie'))
     closeConnection(connection)
-    return render_template('index.html', name=current_user.name, result=result, tab=tab, data=data, interval=interval, credentials=credentials)
+    return render_template('index.html', name=current_user.name, result=result, tab=tab, data=data, interval=interval, credentials=credentials, wait=wait)
 
 """
     POST index.html
@@ -903,11 +1152,16 @@ def index_post():
     idTuple = getConfigID()
     for i in range (0,len(idTuple)):
         """
-        Get unit id from input, then compare it.
-        Selected device => got unit id from input, if not => got None from input.
+            * Get unit id from input, then compare it.
+            * Selected device => got unit id from input, if not => got None from input.
         """
         htmlUnitid = "id_unitid" + str(idTuple[i][0])
         unitid = request.form.get(htmlUnitid)
+        """
+            * Check type and correction of input before update to database.
+            * If its duplicate or error, then return error and skip update.
+            * oldip, oldunitid, oldname == ip, unitid, name in database.
+        """
         if unitid != None:
             number = str(idTuple[i][0])
             ipForm = "ip" + str(number)
@@ -928,16 +1182,17 @@ def index_post():
             if checked != "Passed":
                 flash(checked)
                 return redirect('index')
-            checked = inputChecker(ip, unitid, devicename, oldip, oldunitid, oldname)
+            checked = inputChecker(ip, unitid, devicename, oldip, oldunitid, oldname, nexpieauth)
             if checked != "Passed":
                 flash(checked)
                 return redirect('index')
             interval = str(request.form.get("interval"))
-            checked = writeInterval(interval)
+            wait = str(request.form.get("wait"))
+            checked = writeInterval(interval, wait)
             if checked != "Passed":
                 flash(checked)
                 return redirect('index')
-            # Get length of channel of urconnect from ip address.
+            # Update name, unit and status(enable or disable) of address.
             result = updateConfig(ip, unitid, devicename, oldunitid, oldip, oldname, checkbox, nexpieauth)
             connection = databaseConnection()
             cursor = connection.cursor()
@@ -967,7 +1222,7 @@ def index_post():
             return redirect('index')
 
 """
-    GET powermeter.html
+    powermeter.html
     * Display powermeter's address that use in IDA Platform.
 """
 @app.route("/powermeter")
@@ -976,7 +1231,7 @@ def powermeter():
     try:
         # uRCONNECT tab
         powermeter = getPowermeter()
-        data = getConfig()
+        #data = getConfig()
         # powermeter tab
         urconnect = getUrconnect()
         powermeterAddress = getPowermeterAddress()
@@ -987,28 +1242,37 @@ def powermeter():
     return render_template("powermeter.html", name=current_user.name, urconnect=urconnect, powermeter=powermeter,
     powermeterTab=powermeterTab, powermeterAddress=powermeterAddress, datatypes=datatypeSelector)
 
-
+"""
+    POST powermeter.html
+    * Update powermeter address that need to collect data from uRCONNECT.
+"""
 @app.route("/powermeter", methods=['POST'])
 @login_required
 def powermeter_post():
     try:
-        # First: update powermeter name & urconnect.
+        # Update powermeter name & urconnect.
         name = current_user.name
         oldmetername = request.form.get("oldmetername")
         metername = request.form.get("metername")
         metername = metername.replace(" ", "_")
         urconnect = request.form.get("urconnect")
-        # Second: update powermeter address.
+        # Update powermeter address.
         connection = databaseConnection()
         cursor = connection.cursor()
         executeCommand = "SELECT id FROM powermeter_address WHERE metername = %s"
         cursor.execute(executeCommand, (oldmetername,))
         result = cursor.fetchall()
+        """
+            Short note about "Type"
+            * 00: None
+            * 03: Read Holding Register
+            * 04: Read Input Register
+            * 99: Delete
+        """
         for i in range(0, len(result)):
             id = result[i][0]
             modbustypeForm = "type" + str(id)
             modbustype = request.form.get(modbustypeForm)
-            # Delete command = "99" | None = "00"
             if modbustype == "99":
                 executeCommand = "DELETE FROM powermeter_address WHERE id = %s"
                 cursor.execute(executeCommand, (id,))
@@ -1041,11 +1305,14 @@ def powermeter_post():
         flash("Updated Successfully")
         logger.info('User: ' + current_user.name + ' - "' + metername + '" powermeter config updated.')
         return redirect(url_for('powermeter'))
-
     except:
         flash("Updated failed")
         return redirect(url_for('powermeter'))
 
+"""
+    POST powermeter.html (powermeter/add)
+    * Add new powermeter that connected to uRCONNECT.
+"""
 @app.route("/powermeter/add", methods=['POST'])
 @login_required
 def powermeter_add_post():
@@ -1058,6 +1325,10 @@ def powermeter_add_post():
         flash('Failed: Cannot add "' + metername + '" to database.')
     return redirect(url_for('powermeter'))
 
+"""
+    POST powermeter.html (powermeter/delete)
+    * Add new powermeter that connected to uRCONNECT.
+"""
 @app.route("/powermeter/delete", methods=['POST'])
 @login_required
 def powermeter_delete_post():
@@ -1071,7 +1342,133 @@ def powermeter_delete_post():
     return redirect(url_for('powermeter'))
 
 """
-    POST newdevice, GET index.html
+    cintel.html
+    * Display added C Intelligent module.
+"""
+@app.route("/cintel")
+@login_required
+def cintel():
+    """
+        1) getCintel() = Get C Intelligent name from database.
+        2) getCintelAddress() = Get C Intelligent address from database.
+        3) getCredentialsName() = Get Nexpie credentials list.
+        4) getCintelTab() = Get C Intelligent name tab status (tablinks or tablinks active).
+        5) getDatatype() = Get datatype list from database.
+    """
+    try:
+        cintel = getCintel()
+        cinteldata = getCintelAddress()
+        credentials = getCredentialsName()
+        cintelTab = getCintelTab()
+        datatypeSelector = getDatatype()
+    except:
+        return render_template("cintel.html", name=current_user.name)
+    return render_template("cintel.html", name=current_user.name, cintel=cintel, cinteldata=cinteldata, cintelTab=cintelTab,
+                            credentials=credentials, datatypes=datatypeSelector)
+
+"""
+    POST cintel.html
+    * Edit C Intelligent module reader address to application's database.
+"""
+@app.route("/cintel", methods=['POST'])
+@login_required
+def cintel_post():
+    try:
+        # Update cintel in database
+        name = current_user.name
+        oldcintelname = request.form.get("oldcintelname")
+        cintelname = request.form.get("cintelname")
+        cintelname = cintelname.replace(" ", "_")
+        nexpieauth = request.form.get("nexpieauth")
+        # Check used Nexpie credentials. (Cannot use same credentials w/ urconnect & power meter.)
+        result, flashmsg = cintelDbChecker(nexpieauth)
+        if result == "Not Passed":
+            flash(flashmsg)
+            redirect(url_for('cintel'))
+        # Update C Intelligent address in database
+        connection = databaseConnection()
+        cursor = connection.cursor()
+        executeCommand = "SELECT id FROM cintel_address WHERE cintelname = %s"
+        cursor.execute(executeCommand, (oldcintelname,))
+        result = cursor.fetchall()
+        for i in range(0, len(result)):
+            id = result[i][0]
+            sourceForm = "source" + str(id)
+            plcaddressForm = "plcaddress" + str(id)
+            datatableForm = "datatable" + str(id)
+            datanameForm = "dataname" + str(id)
+            datatypeForm = "datatype" + str(id)
+            unitForm = "unit" + str(id)
+            multiplierForm = "multiplier" + str(id)
+
+            source = request.form.get(sourceForm)
+            plcaddress = request.form.get(plcaddressForm)
+            datatable = request.form.get(datatableForm)
+            dataname = request.form.get(datanameForm)
+            datatype = request.form.get(datatypeForm)
+            multiplier = request.form.get(multiplierForm)
+            unit = request.form.get(unitForm)
+            unit = str(unit)
+            checkResult, quantity = cintelAddressChecker(source, datatable, dataname, datatype ,multiplier, unit)
+            if checkResult == "Passed":
+                executeCommand = "UPDATE cintel_address SET source = %s, plcaddress = %s, datatable = %s, dataname = %s , datatype = %s, unit = %s, multiplier = %s, quantity = %s WHERE id = %s"
+                cursor.execute(executeCommand, (source, plcaddress, datatable, dataname, datatype, unit, multiplier, quantity, id,))
+            else:
+                pass
+        connection.commit()
+        """
+            * updateCintel = update C Intelligent name & Nexpie credentials to database.
+            * updateBlankCintel = add blank address to C Intelligent address database.
+        """
+        updateCintel(cintelname, nexpieauth, oldcintelname)
+        updateBlankCintel(cintelname)
+        closeConnection(connection)
+
+        flash("Updated Successfully")
+        logger.info('User: ' + current_user.name + ' - "' + cintelname + '" C Intelligent config updated.')
+        return redirect(url_for('cintel'))
+    except:
+        flash("Updated failed")
+        return redirect(url_for('cintel'))
+
+"""
+    POST cintel.html (cintel/add)
+    * Add C Intelligent module to application's database.
+"""
+@app.route("/cintel/add", methods=['POST'])
+@login_required
+def cintel_add_post():
+    try:
+        cintelname = request.form.get("cintelname")
+        nexpieauth = request.form.get("newnexpieauth")
+        result, flashmsg = cintelDbChecker(nexpieauth)
+        if result == "Passed":
+            newCintel(cintelname, nexpieauth)
+            flash('"' + cintelname + '" added successfully.')
+        else:
+            flash(flashmsg)
+    except:
+        flash('Failed: Cannot add "' + cintelname + '" to database.')
+    return redirect(url_for('cintel'))
+
+"""
+    POST cintel.html (cintel/delete)
+    * Delete C Intelligent module from application's database.
+"""
+@app.route("/cintel/delete", methods=['POST'])
+@login_required
+def cintel_delete_post():
+    try:
+        cintelname = request.form.get("cintelname")
+        deleteCintel(cintelname)
+        flash('"' + cintelname + '" deleted successfully.')
+        return redirect(url_for('cintel'))
+    except:
+        flash('Failed: Cannot delete "' + cintelname + '" from database.')
+    return redirect(url_for('cintel'))
+
+"""
+    POST index.html (index/add)
     * Add new uRCONNECT to database.
 """
 @app.route("/index/add", methods=['POST'])
@@ -1082,21 +1479,24 @@ def newdevice_post():
     checkbox = request.form.get("newcheckbox")
     devicename = request.form.get("newdevicename")
     nexpieauth = request.form.get("newnexpieauth")
-    checked = inputCheckerNewDevice(ip, unitid, devicename)
+    checked = inputCheckerNewDevice(ip, unitid, devicename, nexpieauth)
     if checked != "Passed":
         flash(checked)
         return redirect(url_for('index'))
     try:
+        # Read cardtype from uRCONNECT.
         cardList = readCard(ip, unitid)
     except:
         cardList = "Failed: Can't connect to " + ip + ", unit id " + unitid
     if cardList == "Failed: Can't connect to " + ip + ", unit id " + unitid:
         flash(cardList)
         return redirect(url_for('index'))
+    # Add new uRCONNECT to database
     newDevice(ip, unitid, checkbox, devicename, nexpieauth)
     resultList = getModbusType("urconnect_settings", cardList)
     connection = databaseConnection()
     cursor = connection.cursor()
+    # Add address to database.
     for i in range(0, len(resultList)):
         name = "ch" + str(resultList[i][2]) + "_" + str(resultList[i][1])
         executeCommand = ("INSERT INTO urconnect_address (unitid, module, channel, type, name, startingAddress, quantity, urconnect, "
@@ -1109,7 +1509,7 @@ def newdevice_post():
     return redirect(url_for('index'))
 
 """
-    GET credentials.html
+    credentials.html
     * Display current NEXPIE credentials.
 """
 @app.route("/credentials")
@@ -1161,6 +1561,10 @@ def credentials_post():
                 flash("Failed: Secret must be 32 characters.")
     return redirect(url_for('credentials'))
 
+"""
+    POST credentials.html (credentials/delete)
+    * Delete NEXPIE credential from database.
+"""
 @app.route("/credentials/delete", methods=['POST'])
 @login_required
 def credentials_delete_post():
@@ -1188,9 +1592,12 @@ def credentials_delete_post():
             return redirect(url_for('credentials'))
     except:
         flash("Failed: Can't delete selected devicename from database.")
-        return redirect('credentials')
+        return redirect(url_for('credentials'))
 
-# Add new nexpie device.
+"""
+    POST credentials.html (credentials/add)
+    * Add NEXPIE credential to database.
+"""
 @app.route("/credentials/add", methods=['POST'])
 @login_required
 def credentials_add_post():
@@ -1199,7 +1606,6 @@ def credentials_add_post():
     newClientID = request.form.get("newClientID")
     newToken = request.form.get("newToken")
     newSecret = request.form.get("newSecret")
-    #newCheckbox = request.form.get("newCheckbox")
     if newDevicename != None and len(newClientID) == 36 and len(newToken) == 32 and len(newSecret) == 32:
         resultChecker = clientidChecker(newClientID)
         if resultChecker == True:
@@ -1227,7 +1633,7 @@ def page():
         return redirect(url_for('login'))
 
 """
-    GET login.html
+    login.html
     * Display web application login page.
 """
 @app.route('/login')
@@ -1274,7 +1680,7 @@ def deleteconfig_post():
     return redirect(url_for('index'))
 
 """
-    GET user.html
+    user.html
     * Display current log and password changer page.
 """
 @app.route('/user')
@@ -1318,7 +1724,40 @@ def user_post():
     return redirect(url_for('user'))
 
 """
-    GET logout
+    dbcfg.html
+    * Update database's password, username, schema, port and ip address.
+"""
+@app.route('/dbcfg')
+@login_required
+def dbcfg():
+    return render_template('dbcfg.html', name=current_user.name)
+
+"""
+    POST dbcfg.html
+    * Update database's password, username, schema, port and ip address.
+"""
+@app.route('/dbcfg' , methods=['POST'])
+@login_required
+def dbcfg_post():
+    webusername = request.form.get('webusername')
+    webpassword = request.form.get('webpassword')
+    # currentpassword = current database password.
+    currentdbpassword = request.form.get('currentpassword')
+    checkedResult = checkPasswordDB(webusername, webpassword, currentdbpassword)
+    if checkedResult == True:
+        ip = request.form.get('ip')
+        port = request.form.get('port')
+        username = request.form.get('dbusername')
+        password = request.form.get('dbpassword')
+        schema = request.form.get('schema')
+        result = dbcfgWriter(ip, port, username, password, schema)
+        flash(result)
+    else:
+        flash("Failed: Username or password do not match.")
+    return render_template('dbcfg.html', name=current_user.name)
+
+"""
+    logout
     * Remove current user session from application, then redirect to login page.
 """
 @app.route('/logout')
@@ -1329,39 +1768,69 @@ def logout():
     logout_user()
     return redirect(url_for('login'))
 
+######################################################################################################################
+# Modbus Reader & C Intelligent.
+######################################################################################################################
+
 """
     * Start modbus thread
     * Note: read enabled device from DB. => get NEXPIE credentials from DB => read value from uRCONNECT
       => convert to JSON => send to NEXPIE.
     * IMPORTANT! : After update uRCONNECT settings and/or NEXPIE credential. You need to restart application to take effect.
     ***************************************************************************************************************************
-    * Q: Why we need to query data from database only 1 time?
+    * Q: Why we need to query data from database only 1 time (when start application)?
     * A: Our database server hardware & internet connection isn't stable enough for multiple concurrent connections.
 """
 def threadedModbus():
     logger.info("Thread: modbusReader started.")
+    """
+        1) Read data from database. (address, name, datatype, unit multiplier, time interval and credentials)
+        2) Read data from uRCONNECT using pyModbusTCP and/or read collected value from C Intelligent module.
+        3) Append readed data to JSON variable
+        4) Send JSON to NEXPIE.
+        5) Wait for x second(s) [x = time interval]
+        6) Read 1) again :P
+    """
     try:
         preparedList, meternameList = prepareAddress()
+        cintelList = prepareCintel()
         logger.info('uRCONNECT: ' + str(urconnectList))
     except:
         pass
 
-    """
-        1. Get time interval value from app_config.ini
-        2. Read data from uRCONNECT using pyModbusTCP.
-        3. Append read data to JSON variable
-        4. Send JSON to NEXPIE.
-        5. Wait for x second(s) [x = time interval]
-    """
     while True:
         try:
             TIME_INTERVAL = int(appconfig.get('TIME_INTERVAL', 'timeInterval'))
-            modbus2Nexpie(preparedList, meternameList)
+            DELAY_BEFORE_NEXPIE = int(appconfig.get('TIME_INTERVAL', 'delayBeforeNexpie'))
+            if preparedList != []:
+                modbus2Nexpie(preparedList, meternameList, DELAY_BEFORE_NEXPIE)
+            if cintelList != []:
+                cintel2Nexpie(cintelList, DELAY_BEFORE_NEXPIE)
             time.sleep(TIME_INTERVAL)
         except:
             logger.debug("Modbus reader error - Please check your configuration or NEXPIE server status.")
             time.sleep(15)
 
+"""
+    * Read data from database. (address, name, datatype, unit multiplier, time interval and credentials)
+    * Dump to JSON data, then append to array.
+    * Structure example. =>
+        [{
+            "credentials" : {
+                "nexpiename": nexpiename,
+                "clientid": clientid,
+                "token": token,
+                "secret": secret
+            },
+            "urconnect" : [{
+                "urconnectname": urconnectname,
+                "unitid": unitid,
+                "ip": ip,
+                "modulename": ["name": addressname, "startaddr": startaddr, "quantity": quantity, "modbustype": modbustype, "unit": unit}],
+                "powermeter" ["name": addressname, "quantity": quantity, "datatype": datatype, "startaddr": startaddr, "modbustype": modbustype, "multiplier": multiplier, "unit": unit}]
+            }]
+        }]
+"""
 def prepareAddress():
     connection = databaseConnection()
     cursor = connection.cursor()
@@ -1369,6 +1838,7 @@ def prepareAddress():
     cursor.execute(executeCommand, ("enabled",))
     urconnectList = cursor.fetchall()
     tempNexpieList = []
+    # Pick nexpie credential from "config" table.
     for i in range(0,len(urconnectList)):
         urconnectNexpiename = str(urconnectList[i][0])
         nexpieauth = getNexpieCredentials(urconnectNexpiename)
@@ -1378,16 +1848,21 @@ def prepareAddress():
         secret = nexpieauth[0][3]
         tempNexpieList.append([nexpiename, clientid, token, secret])
     nexpieList = []
+    """
+        * Remove duplicate nexpie credentials.
+        * e.g. [[nexpiename0, clientid0, token0, secret0], [nexpiename1, clientid1, token1, secret1] , [nexpiename2, clientid2, token2, secret2]]
+    """
     for i in range(0,len(tempNexpieList)):
         if i not in nexpieList:
             nexpieList.append(tempNexpieList[i])
     meternameList = []
     preparedList = []
     for numNexpieList in range(0,len(nexpieList)):
-        nexpiename = nexpieList[numNexpieList][0]
-        clientid = nexpieList[numNexpieList][1]
-        token = nexpieList[numNexpieList][2]
-        secret = nexpieList[numNexpieList][3]
+        # {"nexpiename": "xxx", "clientid": "xxx", "token": "xxx", "secret": "xxx"}
+        nexpiename = nexpieList[numNexpieList][0] # nexpiename0
+        clientid = nexpieList[numNexpieList][1] # clientid0
+        token = nexpieList[numNexpieList][2] # token0
+        secret = nexpieList[numNexpieList][3] # secret0
         addressDict = {}
         addressDict["credentials"] = {}
         addressDict["credentials"]["nexpiename"] = nexpiename
@@ -1395,6 +1870,8 @@ def prepareAddress():
         addressDict["credentials"]["token"] = token
         addressDict["credentials"]["secret"] = secret
         addressDict["urconnect"] = []
+
+        # Query urconnect list.
         connection = databaseConnection()
         cursor = connection.cursor()
         executeCommand = "SELECT unitid, ip, urconnect, nexpieauth FROM config WHERE status = %s and nexpieauth = %s"
@@ -1406,12 +1883,14 @@ def prepareAddress():
             urconnectname = urconnectList[i][2]
             tempdict = {"urconnectname": urconnectname, "unitid": unitid, "ip": ip}
             moduleList = ["1down", "2up", "2down", "3up", "3down"]
+            # Query address from module.
             for n in range(0,len(moduleList)):
                 executeCommand = ('SELECT type, name, startingAddress, quantity, cardtype, module, channel, unit FROM urconnect_address WHERE unitid = %s and urconnect = %s and status = %s and module = %s')
                 cursor.execute(executeCommand, (unitid, urconnectname, "enabled", moduleList[n]))
                 addressList = cursor.fetchall()
                 modulename = "module_" + moduleList[n]
                 tempdict[modulename] = []
+                # Extract address tuple into dictionary.
                 for m in range(0,len(addressList)):
                     modbustype = str(addressList[m][0])
                     addressname = str(addressList[m][1])
@@ -1453,6 +1932,90 @@ def prepareAddress():
     return(preparedList, meternameList)
 
 """
+    * Read C Intelligent data from database.
+    * Dump to JSON data, then append to array same as urconnect & power meter.
+    * Structure example. =>
+        [{
+            "credentials" : {
+                "nexpiename": nexpiename,
+                "clientid": clientid,
+                "token": token,
+                "secret": secret
+            },
+            "cintel" : [{
+                "cintelname": cintelname,
+                "cintel_example": [{"datatable": datatable, "dataname": dataname, "datatype": datatype, "unit": unit, "multiplier": multiplier, "quantity": quantity}]
+            }]
+        }]
+"""
+def prepareCintel():
+    connection = databaseConnection()
+    cursor = connection.cursor()
+    executeCommand = "SELECT nexpieauth FROM cintel"
+    cursor.execute(executeCommand)
+    cintelList = cursor.fetchall()
+    tempNexpieList = []
+    # Pick nexpie credential from "config" table.
+    for i in range(0,len(cintelList)):
+        cintelNexpiename = str(cintelList[i][0])
+        nexpieauth = getNexpieCredentials(cintelNexpiename)
+        nexpiename = nexpieauth[0][0]
+        clientid = nexpieauth[0][1]
+        token = nexpieauth[0][2]
+        secret = nexpieauth[0][3]
+        tempNexpieList.append([nexpiename, clientid, token, secret])
+    nexpieList = []
+    """
+        * Remove duplicate nexpie credentials.
+        * e.g. [[nexpiename0, clientid0, token0, secret0], [nexpiename1, clientid1, token1, secret1] , [nexpiename2, clientid2, token2, secret2]]
+    """
+    for i in range(0,len(tempNexpieList)):
+        if tempNexpieList[i] not in nexpieList:
+            nexpieList.append(tempNexpieList[i])
+    meternameList = []
+    preparedList = []
+    for numNexpieList in range(0,len(nexpieList)):
+        nexpiename = nexpieList[numNexpieList][0] # nexpiename0
+        clientid = nexpieList[numNexpieList][1] # clientid0
+        token = nexpieList[numNexpieList][2] # token0
+        secret = nexpieList[numNexpieList][3] # secret0
+        cintelDict = {}
+        cintelDict["credentials"] = {}
+        cintelDict["credentials"]["nexpiename"] = nexpiename
+        cintelDict["credentials"]["clientid"] = clientid
+        cintelDict["credentials"]["token"] = token
+        cintelDict["credentials"]["secret"] = secret
+        cintelDict["cintel"] = []
+
+        # Query cintel list.
+        connection = databaseConnection()
+        cursor = connection.cursor()
+        executeCommand = "SELECT cintelname FROM cintel WHERE nexpieauth = %s"
+        cursor.execute(executeCommand, (nexpiename,))
+        cintelList = cursor.fetchall()
+        for i in range(0,len(cintelList)):
+            cintelname = cintelList[i][0]
+            tempdict = {"cintelname": cintelname}
+            executeCommand = ('SELECT datatable, dataname, datatype, unit, multiplier, quantity FROM cintel_address WHERE datatable IS NOT NULL and dataname IS NOT NULL and cintelname = %s ')
+            cursor.execute(executeCommand, (cintelname,))
+            cintelAddressList = cursor.fetchall()
+            tempdict[cintelname] = []
+            # Extract address tuple into dictionary.
+            for m in range(0,len(cintelAddressList)):
+                datatable = str(cintelAddressList[m][0])
+                dataname = str(cintelAddressList[m][1])
+                datatype = str(cintelAddressList[m][2])
+                unit = str(cintelAddressList[m][3])
+                multiplier = float(cintelAddressList[m][4])
+                quantity = int(cintelAddressList[m][5])
+                tempaddress = {"datatable": datatable, "dataname": dataname, "datatype": datatype, "unit": unit, "multiplier": multiplier, "quantity": quantity }
+                tempdict[cintelname].append(tempaddress)
+            cintelDict["cintel"].append(tempdict)
+        preparedList.append(cintelDict)
+    closeConnection(connection)
+    return(preparedList)
+
+"""
     * Read current active uRCONNECT from database.
     * Return value that pyModbusTCP need.
 """
@@ -1480,6 +2043,9 @@ def readAddress():
     closeConnection(connection)
     return(urconnectList, addressList, powermeterList, powermeteraddressList)
 
+"""
+    * Read current active uRCONNECT from database.
+"""
 def readPowermeter(urconnect, powermeterList, powermeteraddressList):
     connection = databaseConnection()
     cursor = connection.cursor()
@@ -1497,81 +2063,221 @@ def readPowermeter(urconnect, powermeterList, powermeteraddressList):
     return(powermeterList, powermeteraddressList)
 
 """
+    * Convert C Intelligent value to readable format.
+"""
+def cintelConverter(valueArray, datatype, multiplier):
+    if datatype == "uint32":
+        data = getUint32(valueArray, multiplier)
+    elif datatype == "uint32sw":
+        data = getUint32swapped(valueArray, multiplier)
+    elif datatype == "float32":
+        data = getFloat32(valueArray, multiplier)
+    elif datatype == "float32sw":
+            data = getFloat32swapped(valueArray, multiplier)
+    elif datatype  == "uint16":
+        data = getUint16(valueArray, multiplier)
+    """
+    elif converter == "uint64":
+        getUint64(startingAddress, IP_ADDRESS, UNIT_ID, multiplier)
+
+    elif converter == "float64":
+        getFloat64(startingAddress, IP_ADDRESS, UNIT_ID, multiplier)
+    """
+    return(data)
+
+"""
+    * Get specific C Intelligent value from C Intelligent database.
+"""
+def getDatatableValue(cintelname, datatable, datatype, quantity, multiplier):
+    connection = cintelDbConnection()
+    cursor = connection.cursor()
+    templist = []
+    quantity = int(quantity)
+    for i in range(0, quantity):
+        executeCommand = "SELECT value FROM " + cintelname + " WHERE datatable = %s"
+        cursor.execute(executeCommand, (datatable,))
+        result = cursor.fetchall()
+        value = float(result[0][0])
+        templist.append(value)
+        datatable = str(int(datatable) + 1)
+    connection.close()
+    data = valueConverter(datatype, templist ,multiplier)
+    return(data)
+
+"""
     * Read value from uRCONNECT
     * Read every channel from every module (up to 40 channel) then convert to json format.
+    * Structure example. =>
+        {
+            "currentTime": "01/01/2001 00:00:00"
+            "urconnect_01": {
+                "module_1down": {
+                    "ch1_1down": {
+                        "value": 220,
+                        "unit": "V"
+                    }
+                },
+                "powermeter_01": {
+                    "Voltage": {
+                        "value": 220.1,
+                        "unit": "V"
+                    },
+                    "Temp": {
+                        "value": 25,
+                        "unit": "Celcius"
+                    }
+                },
+                "detail": {
+                    "ip": "192.168.1.1",
+                    "unitid": 1
+                }
+            }
+        }
 """
-def modbus2Nexpie(addressList, meternameList):
+def modbus2Nexpie(addressList, meternameList, DELAY_BEFORE_NEXPIE):
     PORT_NUMBER = 502
     for nexpiename in range(0, len(addressList)):
-        payloaddata = {"data":{}}
-        # load urconnect data from addressList.
-        nexpiedeviceName = addressList[nexpiename]['credentials']['nexpiename']
-        for j in range(0, len(addressList[nexpiename]["urconnect"])):
-            urconnectname = addressList[nexpiename]["urconnect"][j]["urconnectname"]
-            IP_ADDRESS = addressList[nexpiename]["urconnect"][j]["ip"]
-            UNIT_ID = addressList[nexpiename]["urconnect"][j]["unitid"]
-            payloaddata["data"][urconnectname] = {}
-            payloaddata["data"][urconnectname]['detail'] = {}
-            payloaddata["data"][urconnectname]['detail']["ip"] = IP_ADDRESS
-            payloaddata["data"][urconnectname]['detail']["unitid"] = UNIT_ID
-            #
-            for n in range(0,5):
-                moduleDict = {
-                0 : "module_1down",
-                1 : "module_2up",
-                2 : "module_2down",
-                3 : "module_3up",
-                4 : "module_3down"
-                }
-                module = moduleDict[n]
-                payloaddata["data"][urconnectname][module] = {}
+        try:
+            payloaddata = {"data":{}}
+            # load urconnect data from addressList.
+            nexpiedeviceName = addressList[nexpiename]['credentials']['nexpiename']
+            for j in range(0, len(addressList[nexpiename]["urconnect"])):
+                urconnectname = addressList[nexpiename]["urconnect"][j]["urconnectname"]
+                IP_ADDRESS = addressList[nexpiename]["urconnect"][j]["ip"]
+                UNIT_ID = addressList[nexpiename]["urconnect"][j]["unitid"]
+                payloaddata["data"][urconnectname] = {}
+                payloaddata["data"][urconnectname]['detail'] = {}
+                payloaddata["data"][urconnectname]['detail']["ip"] = IP_ADDRESS
+                payloaddata["data"][urconnectname]['detail']["unitid"] = UNIT_ID
                 client = ModbusClient(auto_open=True, timeout=3, host=IP_ADDRESS, port=PORT_NUMBER, unit_id=UNIT_ID, debug=True)
-                for m in range(0, len(addressList[nexpiename]["urconnect"][j][module])):
-                    modbustype = addressList[nexpiename]["urconnect"][j][module][m]['modbustype']
-                    startaddr = addressList[nexpiename]["urconnect"][j][module][m]['startaddr']
-                    quantity = addressList[nexpiename]["urconnect"][j][module][m]['quantity']
-                    addressname = addressList[nexpiename]["urconnect"][j][module][m]['name']
-                    unit = addressList[nexpiename]["urconnect"][j][module][m]['unit']
-                    payloaddata["data"][urconnectname][module][addressname] = {}
-                    if not client.is_open():
-                        if not client.open():
-                            logger.error("unable to connect to " + IP_ADDRESS + ":" + str(PORT_NUMBER))
-                    if client.is_open():
-                        # type = FC (e.g. type 04 == FC04: Read Input Register)
-                        data = modbusReader(modbustype, startaddr, quantity, client)
-                        if modbustype == "04":
-                            data = getFloat32swapped(data, 1)
-                        payloaddata["data"][urconnectname][module][addressname]["value"] = data
-                        payloaddata["data"][urconnectname][module][addressname]["unit"] = unit
-            for n in range(0, len(meternameList[nexpiename])):
-                metername = meternameList[nexpiename][n]
-                payloaddata["data"][urconnectname][metername] = {}
-                for m in range(0, len(addressList[nexpiename]["urconnect"][j][metername])):
-                    addressname = addressList[nexpiename]["urconnect"][j][metername][m]['name']
-                    modbustype = addressList[nexpiename]["urconnect"][j][metername][m]['modbustype']
-                    datatype = addressList[nexpiename]["urconnect"][j][metername][m]['datatype']
-                    startaddr = addressList[nexpiename]["urconnect"][j][metername][m]['startaddr']
-                    multiplier = addressList[nexpiename]["urconnect"][j][metername][m]['multiplier']
-                    quantity = addressList[nexpiename]["urconnect"][j][metername][m]['quantity']
-                    unit = addressList[nexpiename]["urconnect"][j][metername][m]['unit']
-                    payloaddata["data"][urconnectname][metername][addressname] = {}
-                    if not client.is_open():
-                        if not client.open():
-                            logger.error("unable to connect to " + IP_ADDRESS + ":" + str(PORT_NUMBER))
-                    if client.is_open():
-                        # type = FC (e.g. type 04 == FC04: Read Input Register)
-                        data = powermeterConverter(IP_ADDRESS, UNIT_ID, startaddr, quantity, modbustype, datatype, multiplier, client)
-                        payloaddata["data"][urconnectname][metername][addressname]["value"] = data
-                        payloaddata["data"][urconnectname][metername][addressname]["unit"] = unit
-        now = datetime.now(tz=timezone('Asia/Bangkok'))
-        currentTime = now.strftime("%d/%m/%Y %H:%M:%S")
-        payloaddata["data"]["currentTime"] = currentTime
-        nexpieShadow = json.dumps(payloaddata)
-        clientid = addressList[nexpiename]["credentials"]["clientid"]
-        token = addressList[nexpiename]["credentials"]["token"]
-        secret = addressList[nexpiename]["credentials"]["secret"]
-        payloadPost(nexpieShadow, clientid, token, secret)
+                if not client.is_open():
+                    if not client.open():
+                        logger.error("unable to connect to " + IP_ADDRESS + ":" + str(PORT_NUMBER))
+                if client.is_open():
+                    for n in range(0,5):
+                        moduleDict = {
+                        0 : "module_1down",
+                        1 : "module_2up",
+                        2 : "module_2down",
+                        3 : "module_3up",
+                        4 : "module_3down"
+                        }
+                        module = moduleDict[n]
+                        payloaddata["data"][urconnectname][module] = {}
 
+                        for m in range(0, len(addressList[nexpiename]["urconnect"][j][module])):
+                            modbustype = addressList[nexpiename]["urconnect"][j][module][m]['modbustype']
+                            startaddr = addressList[nexpiename]["urconnect"][j][module][m]['startaddr']
+                            quantity = addressList[nexpiename]["urconnect"][j][module][m]['quantity']
+                            addressname = addressList[nexpiename]["urconnect"][j][module][m]['name']
+                            unit = addressList[nexpiename]["urconnect"][j][module][m]['unit']
+                            payloaddata["data"][urconnectname][module][addressname] = {}
+                            # Read value from address.
+                            # type = FC (e.g. type 04 == FC04: Read Input Register)
+                            try:
+                                data = modbusReader(modbustype, startaddr, quantity, client)
+                                if modbustype == "04":
+                                    data = getFloat32swapped(data, 1)
+                                payloaddata["data"][urconnectname][module][addressname]["value"] = data
+                                payloaddata["data"][urconnectname][module][addressname]["unit"] = unit
+                            except:
+                                pass
+                    for n in range(0, len(meternameList[nexpiename])):
+                        metername = meternameList[nexpiename][n]
+                        payloaddata["data"][urconnectname][metername] = {}
+                        for m in range(0, len(addressList[nexpiename]["urconnect"][j][metername])):
+                            addressname = addressList[nexpiename]["urconnect"][j][metername][m]['name']
+                            modbustype = addressList[nexpiename]["urconnect"][j][metername][m]['modbustype']
+                            datatype = addressList[nexpiename]["urconnect"][j][metername][m]['datatype']
+                            startaddr = addressList[nexpiename]["urconnect"][j][metername][m]['startaddr']
+                            multiplier = addressList[nexpiename]["urconnect"][j][metername][m]['multiplier']
+                            quantity = addressList[nexpiename]["urconnect"][j][metername][m]['quantity']
+                            unit = addressList[nexpiename]["urconnect"][j][metername][m]['unit']
+                            payloaddata["data"][urconnectname][metername][addressname] = {}
+                            # Read value from powermeter.
+                            try:
+                                data = powermeterConverter(IP_ADDRESS, UNIT_ID, startaddr, quantity, modbustype, datatype, multiplier, client)
+                                payloaddata["data"][urconnectname][metername][addressname]["value"] = data
+                                payloaddata["data"][urconnectname][metername][addressname]["unit"] = unit
+                            except:
+                                pass
+            now = datetime.now(tz=timezone('Asia/Bangkok'))
+            currentTime = now.strftime("%d/%m/%Y %H:%M:%S")
+            payloaddata["data"]["currentTime"] = currentTime
+            nexpieShadow = json.dumps(payloaddata)
+            clientid = addressList[nexpiename]["credentials"]["clientid"]
+            token = addressList[nexpiename]["credentials"]["token"]
+            secret = addressList[nexpiename]["credentials"]["secret"]
+            time.sleep(DELAY_BEFORE_NEXPIE)
+            payloadPost(nexpieShadow, clientid, token, secret)
+        # Skip if cannot connect to uRCONNECT
+        except:
+            print("failed")
+            pass
+
+"""
+    * Read value from C Intelligent's database.
+    * Read selected value (that was config in webapp), then convert to json format.
+    * Structure example. =>
+        {
+            "time": "01/01/2001 00:00:00"
+            "cintel_name": {
+                "Humid": {
+                    "unit": "RH",
+                    "value": 0
+                },
+                "Uncensored": {
+                  "unit": "U",
+                  "value": 8388608
+                },
+                "Voltage2": {
+                  "unit": "V",
+                  "value": 0
+                }
+            }
+        }
+"""
+def cintel2Nexpie(cintelList, DELAY_BEFORE_NEXPIE):
+    for nexpiename in range(0, len(cintelList)):
+        try:
+            payloaddata = {"data":{}}
+            # load cintel data from cintelList.
+            nexpieCintelName = cintelList[nexpiename]['credentials']['nexpiename']
+            for j in range(0, len(cintelList[nexpiename]["cintel"])):
+                cintelname = cintelList[nexpiename]["cintel"][j]["cintelname"]
+                payloaddata["data"][cintelname] = {}
+                # xd[2]['cintel'][0]['cintel_3']
+                # xd[2]['cintel'][0]['cintel_3'][0]['quantity'])
+                for n in range(0,len(cintelList[nexpiename]["cintel"][j][cintelname])):
+                    dataname = cintelList[nexpiename]["cintel"][j][cintelname][n]['dataname']
+                    datatable = cintelList[nexpiename]["cintel"][j][cintelname][n]['datatable']
+                    datatype = cintelList[nexpiename]["cintel"][j][cintelname][n]['datatype']
+                    unit = cintelList[nexpiename]["cintel"][j][cintelname][n]['unit']
+                    quantity = cintelList[nexpiename]["cintel"][j][cintelname][n]['quantity']
+                    multiplier = cintelList[nexpiename]["cintel"][j][cintelname][n]['multiplier']
+                    # Get value from database.
+                    try:
+                        convertedData = getDatatableValue(cintelname, datatable, datatype, quantity, multiplier)
+                        payloaddata["data"][cintelname][dataname] = {}
+                        payloaddata["data"][cintelname][dataname]["value"] = convertedData
+                        payloaddata["data"][cintelname][dataname]["unit"] = unit
+                    except:
+                        pass
+            now = datetime.now(tz=timezone('Asia/Bangkok'))
+            currentTime = now.strftime("%d/%m/%Y %H:%M:%S")
+            payloaddata["data"]["time"] = currentTime
+            nexpieShadow = json.dumps(payloaddata)
+            clientid = cintelList[nexpiename]["credentials"]["clientid"]
+            token = cintelList[nexpiename]["credentials"]["token"]
+            secret = cintelList[nexpiename]["credentials"]["secret"]
+            time.sleep(DELAY_BEFORE_NEXPIE)
+            payloadPost(nexpieShadow, clientid, token, secret)
+        except:
+            pass
+
+"""
+    * Data converter.
+"""
 def getFloat32(valueArray, multiplier):
     packedUint16 = struct.pack('>HH', valueArray[0], valueArray[1])
     convertedFloat32 = struct.unpack('>f', packedUint16)
@@ -1605,6 +2311,10 @@ def getUint16(valueArray, multiplier):
     data = float(valueArray[0]) * float(multiplier)
     return(data)
 
+"""
+    * Modbus Reader.
+    * Read value from urconnect in selected type.
+"""
 def modbusReader(type, startaddr, quantity, client):
     if type == "01":
         data = client.read_coils(startaddr, quantity) # Return list that contains True or False.
@@ -1620,10 +2330,11 @@ def modbusReader(type, startaddr, quantity, client):
         data = None
     return(data)
 
-def powermeterConverter(IP_ADDRESS, UNIT_ID, startaddr, quantity, modbustype, datatype, multiplier, client):
-    valueArray = modbusReader(modbustype, startaddr, quantity, client)
-    if valueArray == None:
-        return(None)
+"""
+    * Data converter.
+    * y'know i mean it :P
+"""
+def valueConverter(datatype, valueArray, multiplier):
     if datatype == "uint32":
         data = getUint32(valueArray, multiplier)
     if datatype == "uint32sw":
@@ -1631,7 +2342,7 @@ def powermeterConverter(IP_ADDRESS, UNIT_ID, startaddr, quantity, modbustype, da
     elif datatype == "float32":
         data = getFloat32(valueArray, multiplier)
     elif datatype == "float32sw":
-            data = getFloat32swapped(valueArray, multiplier)
+        data = getFloat32swapped(valueArray, multiplier)
     elif datatype  == "uint16":
         data = getUint16(valueArray, multiplier)
     """
@@ -1642,6 +2353,14 @@ def powermeterConverter(IP_ADDRESS, UNIT_ID, startaddr, quantity, modbustype, da
         getFloat64(startingAddress, IP_ADDRESS, UNIT_ID, multiplier)
     """
     return(data)
+
+def powermeterConverter(IP_ADDRESS, UNIT_ID, startaddr, quantity, modbustype, datatype, multiplier, client):
+    valueArray = modbusReader(modbustype, startaddr, quantity, client)
+    if valueArray == None:
+        return(None)
+    else:
+        data = valueConverter(datatype, valueArray, multiplier)
+        return(data)
 
 """
     * Get NEXPIE credential from database.
@@ -1671,16 +2390,22 @@ def payloadPost(dataShadow, nexpieDeviceid, nexpieToken, nexpieSecret):
     except:
         pass
 
+######################################################################################################################
+# Start Application.
+######################################################################################################################
+
 """
     * Application init.
     * Note: create user if not exists. => ping NEXPIE & DB server => start modbusReader thread
       => start web application => :)
+    * It's okay if u want to deploy web application, but i prefer to run script on server/device instead of deploy to server.
 """
 if __name__ == '__main__':
     logger.info("Logger: Started.")
     #app.debug = True
     nexpieLoopChecker = True
     while nexpieLoopChecker == True:
+        # You can change to selected server, but IDA Platform use NEXPIE shadow.
         try:
             r = pyping.ping('api.nexpie.io')
             if r.ret_code == 0:
@@ -1694,7 +2419,7 @@ if __name__ == '__main__':
     webappLoopChecker = True
     while webappLoopChecker == True:
         try:
-            r = pyping.ping('203.150.37.154')
+            r = pyping.ping(DB_IP)
             if r.ret_code == 0:
                 logger.info("Ping database server: Success")
 

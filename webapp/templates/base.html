@@ -19,6 +19,8 @@
   {% elif request.path == url_for('credentials') %}
   <link rel="stylesheet" href="{{ url_for('static',filename='css/credentials.css') }}">
   <link rel="stylesheet" href="{{ url_for('static',filename='css/tab_table.css') }}">
+  {% elif request.path == url_for('dbcfg') %}
+  <link rel="stylesheet" href="{{ url_for('static',filename='css/dbcfg.css') }}">
   {% endif %}
   <title>{% block title %}{% endblock %}</title>
 </head>
@@ -38,13 +40,18 @@
       {% else %}
       <a href={{ url_for('powermeter') }}>Power Meter</a>
       {% endif %}
+      {% if request.path == url_for('cintel') %}
+      <a class="active" href={{ url_for('cintel') }}>C Intelligent</a>
+      {% else %}
+      <a href={{ url_for('cintel') }}>C Intelligent</a>
+      {% endif %}
       {% if request.path == url_for('credentials') %}
       <a class="active" href={{ url_for('credentials') }}>Credentials</a>
       {% else %}
       <a href={{ url_for('credentials') }}>Credentials</a>
       {% endif %}
       <a class="line">|</a>
-      {% if request.path == url_for('user') %}
+      {% if request.path == url_for('user') or request.path == url_for('dbcfg') %}
       <a class="active" href={{ url_for('user') }}>{{ name }}</a>
       {% else %}
       <a href={{ url_for('user') }}>{{ name }}</a>
@@ -62,7 +69,7 @@
   </div>
   <script type=text/javascript src="{{ url_for('static', filename='js/jquery-1.9.1.min.js') }}"></script>
   <script type=text/javascript src="{{ url_for('static', filename='js/tab_table.js') }}"></script>
-  {% if request.path == url_for('index') or request.path == url_for('index_post') or request.path == url_for('powermeter') %}
+  {% if request.path == url_for('index') or request.path == url_for('index_post') or request.path == url_for('powermeter')%}
   <script type=text/javascript src="{{ url_for('static', filename='js/config_validator.js') }}"></script>
   <script type=text/javascript src="{{ url_for('static', filename='js/hidden_pic.js') }}"></script>
   <script type=text/javascript src="{{ url_for('static', filename='js/delete_confirm.js') }}"></script>
@@ -71,6 +78,8 @@
   <script type=text/javascript src="{{ url_for('static', filename='js/passwd_checker.js') }}"></script>
   {% elif request.path == url_for('credentials') %}
   <script type=text/javascript src="{{ url_for('static', filename='js/tab_table.js') }}"></script>
+  <script type=text/javascript src="{{ url_for('static', filename='js/delete_confirm.js') }}"></script>
+  {% elif request.path == url_for('cintel') %}
   <script type=text/javascript src="{{ url_for('static', filename='js/delete_confirm.js') }}"></script>
   {% endif %}
 </body>

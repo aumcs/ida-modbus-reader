@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+{% block title %}C Intelligent • IDA Platform{% endblock %}
+{% block content %}
+<div class="box-header">
+  <br><br><br>
+  <h2>C-Intelligent</h2><br>
+</div>
+
+<!DOCTYPE html>
+<html>
+
+<body>
+  <!-- alert -->
+  {% with messages = get_flashed_messages() %}
+  {% if messages[0] == "Updated Successfully" or "successfully" in messages[0] %}
+  <br>
+  <div class="success_item">
+    {{ messages[0] }}
+    <span class="closebtn" onclick="this.parentElement.style.display='none';">&times;</span>
+  </div>
+  {% elif messages %}
+  <br>
+  <div class="alert_item">
+    {{ messages[0] }}
+    <span class="closebtn" onclick="this.parentElement.style.display='none';">&times;</span>
+  </div>
+  {% endif %}
+  {% endwith %}
+
+  <!-- tab -->
+    <div class="tab">
+    {% for tabrow in cintelTab %}
+    <button class='{{ tabrow[0] }}' onclick="openTab(event, 'table{{ tabrow[1] }}')">{{ tabrow[2] }}</button>
+    {% endfor %}
+    <button class='tablinks' onclick="openTab(event, 'newcintel')">New Device</button>
+  </div>
+
+  <!-- elements in tab -->
+  <!-- datarow: id, cintelname, tablinks, nexpieauth -->
+  {% for datarow in cintel %}
+  {% if datarow[2] == "tablinks active" %}
+  <br>
+  <div id="table{{ datarow[0] }}" class="tabcontent" style="display: block">
+    {% else %}
+    <div id="table{{ datarow[0] }}" class="tabcontent">
+      {% endif %}
+      <div id="delete_config" class="delete_config">
+        <form class="form-inline" method="POST" onclick="clicked(event)" action="/cintel/delete">
+          <td><button type="submit" class="btn" name="cintelname" value={{ datarow[1] }}>Delete</button></td>
+        </form>
+      </div>
+      <form method="POST" action="/cintel">
+      <div class="form-group" style="align-items: center;justify-content:center;display: flex">
+        <table style="width:50%">
+          <tr>
+            <td style="width:60%;border: none"><label for="devicename{{ datarow[0] }}">C-Intelligent Name:&nbsp;</label>
+              <input type="text" id="cintelname" name="cintelname" maxlength="30" value={{ datarow[1] }}>
+              <input type="text" id="oldcintelname" name="oldcintelname" maxlength="30" value={{ datarow[1] }} hidden>
+            </td>
+            <td style="width:40%;border: none"><label for="nexpieauth">NEXPIE:&nbsp;&nbsp;</label>
+              <select name="nexpieauth" id="nexpieauth">
+              {% for name in credentials %}
+              {% if name[0] == datarow[3] %}
+                <option value={{ name[0] }}>{{ name[0] }}</option>
+              {% endif %}
+              {% endfor %}
+                <option value="none">None</option>
+              <!-- then print other model that not selected -->
+              {% for name in credentials %}
+              {% if name[0] != datarow[3] %}
+                <option value={{ name[0] }}>{{ name[0] }}</option>
+              {% endif %}
+              {% endfor %}
+              </select>
+            </td>
+          </tr>
+        </table>
+      </div>
+      <br>
+      <div class="addresslist3" style="align-items: center;justify-content:center;display: flex">
+      <table style="width:70%">
+        <tr>
+          <th>Source</th>
+          <th>PLC Address</th>
+          <th>Data Table</th>
+          <th>Data Name</th>
+          <th>Datatype</th>
+          <th>Unit</th>
+          <th>Multiplier</th>
+        </tr>
+        <!-- address: id, cintelname, source, plcaddress, datatype, datatable, dataname, unit, multiplier -->
+        {% for address in cinteldata %}
+        {% if datarow[1] == address[1] %}
+        <tr>
+          <!-- if datatable != None > Print that tuple from db -->
+          {% if address[5] != None %}
+              <td style="width:15%"><input type="text" id="source" name="source{{ address[0] }}" size=16 value='{{ address[2] }}' ></td>
+              <td style="width:10%"><input type="text" id="plcaddress" name="plcaddress{{ address[0] }}" size=10 value='{{ address[3] }}' ></td>
+              <td style="width:10%"><input type="text" id="datatable" name="datatable{{ address[0] }}" size=10 value='{{ address[5] }}' ></td>
+              <td style="width:15%"><input type="text" id="dataname" name="dataname{{ address[0] }}" size=16 value='{{ address[6] }}' ></td>
+              <td style="width:10%"><select id="datatype" name="datatype{{ address[0] }}">{% include 'datatype_selector.html' %}</select></td>
+              <td style="width:5%"><input type="text" id="unit" name="unit{{ address[0] }}" size=6 value='{{ address[7] }}' ></td>
+              <td style="width:5%"><input type="text" id="multiplier" name="multiplier{{ address[0] }}" size=6 value='{{ address[8] }}' ></td>
+          {% else %}
+              <td style="width:15%"><input type="text" id="source" name="source{{ address[0] }}" size=16></td>
+              <td style="width:10%"><input type="text" id="plcaddress" name="plcaddress{{ address[0] }}" size=10></td>
+              <td style="width:10%"><input type="text" id="datatable" name="datatable{{ address[0] }}" size=10></td>
+              <td style="width:15%"><input type="text" id="dataname" name="dataname{{ address[0] }}" size=16></td>
+              <td style="width:10%"><select id="datatype" name="datatype{{ address[0] }}">{% include 'datatype_selector.html' %}</select></td>
+              <td style="width:5%"><input type="text" id="unit" name="unit{{ address[0] }}" size=6></td>
+              <td style="width:5%"><input type="text" id="multiplier" name="multiplier{{ address[0] }}" size=6></td>
+          {% endif %}
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </table>
+    </div><br><br><br><br>
+    <div id="submit_config" class="submit_config">
+      <button type="submit" class="btn" value="submit1">Update</button>
+    </div>
+  </form>
+</div>
+{% endfor %}
+
+  <div id="newcintel" class="tabcontent">
+    <form method="POST" action="/cintel/add">
+      <div class="form-group" style="align-items: center;justify-content:center;display: flex">
+        <table style="width:50%">
+          <tr>
+            <!-- style="border: none" -->
+            <td style="width:60%; border: none"><label for="cintelname">C-Intelligent Name:&nbsp;</label>
+              <input type="text" id="cintelname" name="cintelname" maxlength="30" value="IDA">
+            </td>
+            <td style="width: 40%;border: none"><label for="newnexpieauth">NEXPIE:&nbsp;</label>
+              <select name="newnexpieauth" id="newnexpieauth">
+              {% for name in credentials %}
+                <option value={{ name[0] }}>{{ name[0] }}</option>
+              {% endfor %}
+              </select>
+            </td>
+          </tr>
+        </table>
+      </div>
+      <div id="submit_config" class="submit_config">
+        <button type="submit" class="btn" value="submit1">Add C-Intelligent</button>
+      </div>
+      </form>
+  </div>
+</html>
+{% endblock %}

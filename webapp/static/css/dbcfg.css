@@ -1,0 +1,40 @@
+.box-header-dbcfg{
+  width:80%;
+  margin: auto;
+}
+
+.dbcfg_input, .submit_dbcfg{
+  align-items: center;
+  justify-content: center;
+  display: flex;
+}
+
+.dbcfg_input table{
+  width: 40%;
+}
+
+.dbcfg_input td{
+  /*text-align: right !important;*/
+  border: none !important;
+}
+
+.dbcfg_input th{
+  font-size: 20px;
+  border: none !important;
+}
+
+.textarea_log {
+  align-items: center;
+  justify-content: center;
+  display: flex;
+  height: 500px;
+}
+
+.textarea_log textarea {
+  resize: none;
+  width: 80%;
+  height: 100%;
+  background-color: #fff;
+  border: none;
+  border-bottom: 1px solid #8a8a8a;
+}
